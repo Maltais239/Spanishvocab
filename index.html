@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spanish Word Matching Game</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f7f4;
+            color: #333;
+        }
+        canvas {
+            border: 2px solid #005f73;
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            cursor: pointer;
+        }
+        #learned-words-container {
+            width: 800px;
+            margin-top: 20px;
+        }
+        h2 {
+            color: #005f73;
+            text-align: center;
+        }
+        #learned-words-list {
+            list-style-type: none;
+            padding: 10px;
+            height: 150px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #fafafa;
+            columns: 4;
+            -webkit-columns: 4;
+            -moz-columns: 4;
+        }
+        #learned-words-list li {
+            padding: 4px 12px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <div id="learned-words-container">
+        <h2>Learned Words (<span id="learned-count">0</span>)</h2>
+        <ul id="learned-words-list">
+        </ul>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const learnedWordsList = document.getElementById('learned-words-list');
+        const learnedCountSpan = document.getElementById('learned-count');
+
+        // --- Configuration & Styling ---
+        const PALETTE = {
+            background: '#ffffff',
+            text: '#003049',
+            card: '#eae2b7',
+            cardHover: '#f77f00',
+            cardSelected: '#0077b6',
+            correct: '#2a9d8f',
+            incorrect: '#e63946',
+            reveal: '#ffb703', // Color for "Don't Know" reveals
+            shadow: 'rgba(0,0,0,0.1)'
+        };
+        
+        const ROUND_SIZE = 8;
+
+        const MASTER_WORD_LIST = [
+            // --- Greetings & Basics ---
+            { spanish: 'hola', english: 'hello' },
+            { spanish: 'adiós', english: 'goodbye' },
+            { spanish: 'por favor', english: 'please' },
+            { spanish: 'gracias', english: 'thank you' },
+            { spanish: 'de nada', english: 'you\'re welcome' },
+            { spanish: 'sí', english: 'yes' },
+            { spanish: 'no', english: 'no' },
+            { spanish: 'buenos días', english: 'good morning' },
+            { spanish: 'buenas tardes', english: 'good afternoon' },
+            { spanish: 'buenas noches', english: 'good night' },
+            { spanish: '¿cómo estás?', english: 'how are you?' },
+            { spanish: 'muy bien', english: 'very well' },
+
+            // --- Ordering Food ---
+            { spanish: 'la cuenta', english: 'the bill' },
+            { spanish: 'una mesa', english: 'a table' },
+            { spanish: 'el menú', english: 'the menu' },
+            { spanish: 'quiero', english: 'I want' },
+            { spanish: 'para comer', english: 'to eat' },
+            { spanish: 'para beber', english: 'to drink' },
+            { spanish: 'agua', english: 'water' },
+            { spanish: 'vino', english: 'wine' },
+            { spanish: 'cerveza', english: 'beer' },
+            { spanish: 'café', english: 'coffee' },
+            { spanish: 'pollo', english: 'chicken' },
+            { spanish: 'pescado', english: 'fish' },
+            { spanish: 'ensalada', english: 'salad' },
+            { spanish: 'postre', english: 'dessert' },
+
+            // --- Common Verbs ---
+            { spanish: 'ser', english: 'to be' },
+            { spanish: 'estar', english: 'to be (state)' },
+            { spanish: 'tener', english: 'to have' },
+            { spanish: 'hacer', english: 'to do/make' },
+            { spanish: 'ir', english: 'to go' },
+            { spanish: 'ver', english: 'to see' },
+            { spanish: 'comer', english: 'to eat' },
+            { spanish: 'beber', english: 'to drink' },
+            { spanish: 'hablar', english: 'to speak' },
+            { spanish: 'necesitar', english: 'to need' },
+            { spanish: 'comprar', english: 'to buy' },
+            { spanish: 'pagar', english: 'to pay' },
+
+            // --- People & Family ---
+            { spanish: 'amigo/a', english: 'friend' },
+            { spanish: 'la familia', english: 'the family' },
+            { spanish: 'madre', english: 'mother' },
+            { spanish: 'padre', english: 'father' },
+            { spanish: 'hermano/a', english: 'sibling' },
+            { spanish: 'hijo/a', english: 'child' },
+            { spanish: 'hombre', english: 'man' },
+            { spanish: 'mujer', english: 'woman' },
+
+            // --- Places ---
+            { spanish: 'el baño', english: 'the bathroom' },
+            { spanish: 'la casa', english: 'the house' },
+            { spanish: 'la ciudad', english: 'the city' },
+            { spanish: 'el restaurante', english: 'the restaurant' },
+            { spanish: 'el hotel', english: 'the hotel' },
+            { spanish: 'la playa', english: 'the beach' },
+            { spanish: 'la tienda', english: 'the store' },
+            { spanish: 'la calle', english: 'the street' },
+
+            // --- Adjectives & Descriptors ---
+            { spanish: 'grande', english: 'big' },
+            { spanish: 'pequeño', english: 'small' },
+            { spanish: 'bueno', english: 'good' },
+            { spanish: 'malo', english: 'bad' },
+            { spanish: 'caliente', english: 'hot' },
+            { spanish: 'frío', english: 'cold' },
+            { spanish: 'nuevo', english: 'new' },
+            { spanish: 'delicioso', english: 'delicious' },
+
+            // --- Abstract Concepts ---
+            { spanish: 'el tiempo', english: 'time/weather' },
+            { spanish: 'la vida', english: 'life' },
+            { spanish: 'el amor', english: 'love' },
+            { spanish: 'la idea', english: 'idea' },
+            { spanish: 'la pregunta', english: 'question' },
+            { spanish: 'el problema', english: 'problem' },
+            { spanish: 'la razón', english: 'reason' },
+            { spanish: 'el mundo', english: 'world' }
+        ];
+        
+        let gameState = {
+            score: 0,
+            round: 1,
+            totalLearned: new Set(),
+            currentWords: [],
+            cards: [],
+            dontKnowButtons: [],
+            selectedSpanish: null,
+            selectedEnglish: null,
+            feedback: null,
+            isRoundOver: false,
+            isGameOver: false,
+            mouse: { x: 0, y: 0, hover: null },
+            buttons: {}
+        };
+
+        // --- Utility Functions ---
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+        function getUnusedWords(count) {
+            const unused = MASTER_WORD_LIST.filter(word => !gameState.totalLearned.has(word.spanish));
+            return unused.slice(0, count);
+        }
+        
+        function drawRoundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        function isMouseOver(mouse, rect) {
+            return rect && mouse.x > rect.x && mouse.x < rect.x + rect.width && mouse.y > rect.y && mouse.y < rect.y + rect.height;
+        }
+
+        function isMouseOverCircle(mouse, circle) {
+            if (!circle) return false;
+            const dx = mouse.x - circle.x;
+            const dy = mouse.y - circle.y;
+            return Math.sqrt(dx*dx + dy*dy) < circle.radius;
+        }
+
+        function resetGame() {
+            gameState.isGameOver = false;
+            gameState.isRoundOver = false;
+            gameState.totalLearned.clear();
+            if(learnedWordsList) learnedWordsList.innerHTML = '';
+            if(learnedCountSpan) learnedCountSpan.textContent = 0;
+            gameState.score = 0;
+            gameState.round = 1;
+            gameState.feedback = null;
+            gameState.buttons = {};
+        }
+
+        // --- Game Logic ---
+        function startRound() {
+            gameState.currentWords = getUnusedWords(ROUND_SIZE);
+            if (gameState.currentWords.length === 0) {
+                 gameState.isGameOver = true;
+                 return;
+            }
+
+            const shuffledEnglish = gameState.currentWords.map(w => ({ english: w.english, spanish: w.spanish }));
+            shuffleArray(shuffledEnglish);
+            
+            gameState.isRoundOver = false;
+            gameState.cards = [];
+            gameState.dontKnowButtons = [];
+            gameState.selectedSpanish = null;
+            gameState.selectedEnglish = null;
+            gameState.feedback = null;
+            
+            const cardWidth = 250;
+            const cardHeight = 50;
+            const y_start = 120;
+            const y_step = (canvas.height - y_start - 50) / ROUND_SIZE;
+            const spanish_x = canvas.width / 4 - cardWidth / 2;
+            const english_x = (canvas.width * 3) / 4 - cardWidth / 2;
+
+            for(let i = 0; i < gameState.currentWords.length; i++) {
+                const spanishCard = { type: 'spanish', word: gameState.currentWords[i].spanish, x: spanish_x, y: y_start + i * y_step, width: cardWidth, height: cardHeight, matched: false, shake: 0 };
+                gameState.cards.push(spanishCard);
+                
+                const englishCard = { type: 'english', word: shuffledEnglish[i].english, x: english_x, y: y_start + i * y_step, width: cardWidth, height: cardHeight, matched: false, shake: 0 };
+                gameState.cards.push(englishCard);
+
+                // Create "Don't Know" button for each Spanish card
+                const buttonRadius = 12;
+                const buttonX = spanish_x + cardWidth + 20;
+                const buttonY = spanishCard.y + cardHeight / 2;
+                gameState.dontKnowButtons.push({ x: buttonX, y: buttonY, radius: buttonRadius, spanishCard: spanishCard });
+            }
+        }
+
+        function checkMatch() {
+            if (gameState.selectedSpanish === null || gameState.selectedEnglish === null) return;
+            
+            const spanishCard = gameState.selectedSpanish;
+            const englishCard = gameState.selectedEnglish;
+            const spanishWordObj = MASTER_WORD_LIST.find(w => w.spanish === spanishCard.word);
+
+            if (spanishWordObj && spanishWordObj.english === englishCard.word) {
+                gameState.feedback = { type: 'correct', cards: [spanishCard, englishCard] };
+                setTimeout(() => {
+                    spanishCard.matched = true;
+                    englishCard.matched = true;
+                    if (!gameState.totalLearned.has(spanishWordObj.spanish)) {
+                        gameState.totalLearned.add(spanishWordObj.spanish);
+                        updateLearnedList(spanishWordObj);
+                    }
+                    gameState.score++;
+                    gameState.selectedSpanish = null;
+                    gameState.selectedEnglish = null;
+                    gameState.feedback = null;
+
+                    if (gameState.cards.every(c => c.matched)) {
+                       gameState.isRoundOver = true;
+                       if (getUnusedWords(1).length === 0) gameState.isGameOver = true;
+                    }
+                }, 500);
+            } else {
+                gameState.feedback = { type: 'incorrect', cards: [spanishCard, englishCard] };
+                spanishCard.shake = 15;
+                englishCard.shake = 15;
+                setTimeout(() => {
+                    gameState.selectedSpanish = null;
+                    gameState.selectedEnglish = null;
+                    gameState.feedback = null;
+                }, 700);
+            }
+        }
+        
+        function revealAnswer(spanishCard) {
+            const spanishWordObj = MASTER_WORD_LIST.find(w => w.spanish === spanishCard.word);
+            if (!spanishWordObj) return;
+
+            const englishCard = gameState.cards.find(c => c.type === 'english' && c.word === spanishWordObj.english && !c.matched);
+            if (!englishCard) return;
+
+            gameState.feedback = { type: 'reveal', cards: [spanishCard, englishCard] };
+            setTimeout(() => {
+                spanishCard.matched = true;
+                englishCard.matched = true;
+                gameState.selectedSpanish = null;
+                gameState.selectedEnglish = null;
+                gameState.feedback = null;
+                
+                if (gameState.cards.every(c => c.matched)) {
+                    gameState.isRoundOver = true;
+                    if (getUnusedWords(1).length === 0) gameState.isGameOver = true;
+                }
+            }, 800);
+        }
+
+        function updateLearnedList(wordObj) {
+            const li = document.createElement('li');
+            li.textContent = wordObj.spanish;
+            learnedWordsList.appendChild(li);
+            learnedWordsList.scrollTop = learnedWordsList.scrollHeight;
+            learnedCountSpan.textContent = gameState.totalLearned.size;
+        }
+
+        // --- Drawing ---
+        function gameLoop() {
+            drawGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function drawGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = PALETTE.background;
+            ctx.fillRect(0,0,canvas.width, canvas.height);
+
+            ctx.fillStyle = PALETTE.text;
+            ctx.font = "bold 32px 'Segoe UI'";
+            ctx.textAlign = "center";
+            ctx.fillText("Spanish Word Matching", canvas.width / 2, 60);
+            
+            ctx.fillStyle = '#666';
+            ctx.font = "18px 'Segoe UI'";
+            const correctInRound = gameState.cards.filter(c => c.type === 'spanish' && c.matched).length;
+            ctx.fillText(`Round: ${gameState.round} | Score: ${correctInRound} / ${ROUND_SIZE}`, canvas.width / 2, 95);
+
+            gameState.cards.forEach(card => {
+                if (card.matched) return;
+                let x = card.x;
+                if(card.shake > 0) {
+                    x += Math.sin(card.shake * Math.PI) * 5;
+                    card.shake--;
+                }
+                
+                const isHovered = isMouseOver(gameState.mouse, card);
+                ctx.shadowColor = PALETTE.shadow;
+                ctx.shadowBlur = isHovered ? 15 : 5;
+                ctx.shadowOffsetY = isHovered ? 8 : 4;
+                
+                ctx.fillStyle = PALETTE.card;
+                if (gameState.selectedSpanish === card || gameState.selectedEnglish === card) ctx.fillStyle = PALETTE.cardSelected;
+                if (gameState.feedback && gameState.feedback.cards.includes(card)) {
+                    ctx.fillStyle = PALETTE[gameState.feedback.type];
+                }
+                drawRoundRect(ctx, x, card.y, card.width, card.height, 10);
+                
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetY = 0;
+
+                ctx.fillStyle = (gameState.selectedSpanish === card || gameState.selectedEnglish === card || (gameState.feedback && gameState.feedback.cards.includes(card))) ? '#FFF' : PALETTE.text;
+                ctx.font = "20px 'Segoe UI'";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(card.word, x + card.width / 2, card.y + card.height / 2);
+            });
+            
+            // Draw "Don't Know" buttons
+            gameState.dontKnowButtons.forEach(button => {
+                if (button.spanishCard.matched) return;
+
+                const isHovered = isMouseOverCircle(gameState.mouse, button);
+                ctx.fillStyle = isHovered ? PALETTE.cardHover : PALETTE.text;
+                ctx.beginPath();
+                ctx.arc(button.x, button.y, button.radius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = PALETTE.background;
+                ctx.font = "bold 18px 'Segoe UI'";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("?", button.x, button.y + 1);
+            });
+
+            if (gameState.isRoundOver && !gameState.isGameOver) drawOverlay("Round Complete!", "Next Round");
+            if (gameState.isGameOver) drawOverlay("All Words Learned!", "Play Again");
+        }
+
+        function drawOverlay(title, buttonText) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = "bold 48px 'Segoe UI'";
+            ctx.textAlign = 'center';
+            ctx.fillText(title, canvas.width / 2, canvas.height / 2 - 50);
+
+            const btn = { x: canvas.width / 2 - 100, y: canvas.height / 2 + 20, width: 200, height: 50 };
+            gameState.buttons.main = btn;
+
+            ctx.fillStyle = isMouseOver(gameState.mouse, btn) ? PALETTE.cardHover : PALETTE.card;
+            drawRoundRect(ctx, btn.x, btn.y, btn.width, btn.height, 10);
+            
+            ctx.fillStyle = PALETTE.text;
+            ctx.font = "bold 24px 'Segoe UI'";
+            ctx.fillText(buttonText, canvas.width / 2, btn.y + btn.height / 2 + 3);
+        }
+
+        // --- Event Handling ---
+        function handleMouseClick(e) {
+            const mouse = gameState.mouse;
+            if (gameState.isRoundOver || gameState.isGameOver) {
+                if(isMouseOver(mouse, gameState.buttons.main)) {
+                    if (gameState.isGameOver) {
+                        resetGame();
+                    } else {
+                        gameState.round++;
+                    }
+                    startRound();
+                }
+                return;
+            }
+
+            if (gameState.feedback) return;
+
+            // Check for "Don't Know" button clicks first
+            const clickedButton = gameState.dontKnowButtons.find(btn => !btn.spanishCard.matched && isMouseOverCircle(mouse, btn));
+            if (clickedButton) {
+                revealAnswer(clickedButton.spanishCard);
+                return;
+            }
+
+            const clickedCard = gameState.cards.find(card => !card.matched && isMouseOver(mouse, card));
+            if (clickedCard) {
+                if(clickedCard.type === 'spanish') gameState.selectedSpanish = clickedCard;
+                else if (clickedCard.type === 'english') gameState.selectedEnglish = clickedCard;
+                checkMatch();
+            }
+        }
+        
+        function handleMouseMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            gameState.mouse.x = e.clientX - rect.left;
+            gameState.mouse.y = e.clientY - rect.top;
+        }
+
+        canvas.addEventListener('click', handleMouseClick);
+        canvas.addEventListener('mousemove', handleMouseMove);
+
+        // --- Start Game ---
+        startRound();
+        gameLoop();
+    </script>
+</body>
+</html>
+
