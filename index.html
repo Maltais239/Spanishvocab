@@ -11,10 +11,12 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
+            min-height: 100vh; /* Changed from height to min-height */
             margin: 0;
             background-color: #f0f7f4;
             color: #333;
+            padding: 2rem 0; /* Added padding */
+            box-sizing: border-box; /* Ensures padding is calculated correctly */
         }
         canvas {
             border: 2px solid #005f73;
@@ -355,11 +357,13 @@
             ctx.fillStyle = PALETTE.text;
             ctx.font = "bold 32px 'Segoe UI'";
             ctx.textAlign = "center";
+            ctx.textBaseline = "middle"; // Fix: Vertically center the title
             ctx.fillText("Spanish Word Matching", canvas.width / 2, 60);
             
             ctx.fillStyle = '#666';
             ctx.font = "18px 'Segoe UI'";
             const correctInRound = gameState.cards.filter(c => c.type === 'spanish' && c.matched).length;
+            // No need to set textBaseline again, it will carry over from the title
             ctx.fillText(`Round: ${gameState.round} | Score: ${correctInRound} / ${ROUND_SIZE}`, canvas.width / 2, 95);
 
             gameState.cards.forEach(card => {
@@ -479,4 +483,3 @@
     </script>
 </body>
 </html>
-
